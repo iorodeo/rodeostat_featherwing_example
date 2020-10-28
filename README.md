@@ -2,7 +2,7 @@
 
 Example firmware and host pc software demonstrating how to use the rodeostat featherwing potentiostat.
 
-* host: contains host pc software example
+* host: contains host pc software example (Python3, python-serial, numpy, matplotlib)
 * device: contains the device firmware example
 
 
