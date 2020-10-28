@@ -1,0 +1,1 @@
+rm /media/$USER/CIRCUITPY/*.py
