@@ -13,6 +13,7 @@ param = {
         }
 
 pstat = Potentiostat('/dev/ttyACM0')
+pstat.range('100uA')
 pstat.averaging(50)
 pstat.offset(0.0)
 
