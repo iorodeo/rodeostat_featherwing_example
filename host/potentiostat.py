@@ -8,9 +8,10 @@ class Potentiostat(serial.Serial):
     MAX_ABS_VOLTAGE = 1.65
     ALLOWED_CURRENT_RANGE = ('1uA', '10uA', '100uA', '1000uA')
     ALLOWED_TEST_NAMES = ['cyclic']
+    THROW_AWAY_TIMEOUT = 0.1
 
     def __init__(self, port):
-        port_param = {'port': port, 'baudrate': 115200, 'timeout': 0.1}
+        port_param = {'port': port, 'baudrate': 115200, 'timeout': 0.5}
         super().__init__(**port_param)
         self.num_throw_away = 10
         self.max_error_count = 10
@@ -22,8 +23,11 @@ class Potentiostat(serial.Serial):
         Throw away first few lines. Deals with case where user has updated the firmware
         which writes a bunch text to the serial port. 
         """
+        timeout = self.timeout
+        self.timeout = self.THROW_AWAY_TIMEOUT
         for i in range(self.num_throw_away):
             line = self.readline()
+        self.timeout = timeout
 
 
     def get_values(self):
@@ -117,7 +121,6 @@ class Potentiostat(serial.Serial):
                 }
 
         """
-
         if not test_name in self.ALLOWED_TEST_NAMES:
             raise ValueError('unknown test name {}'.format(test_name))
 
@@ -131,42 +134,33 @@ class Potentiostat(serial.Serial):
         """
         Send and receive message from the device.
         """
-        msg_json = json.dumps(msg_dict) + '\n'
+        msg_json = f'{json.dumps(msg_dict)}\n'
         self.write(msg_json.encode())
         rsp_json = self.readline()
         rsp_json = rsp_json.strip()
-        done = False
-        error_count = 0
-        while not done:
-            try:
-                rsp_dict = json.loads(rsp_json.decode('utf-8'))
-                done = True
-            except json.decoder.JSONDecodeError:
-                line = self.readline()
-                if line:
-                    print('error: {}'.format(line))
-                    print()
-                error_count += 1
-                if error_count >= self.max_error_count:
-                    exit(0)
+        try:
+            rsp_dict = json.loads(rsp_json.decode('utf-8'))
+            done = True
+        except json.decoder.JSONDecodeError as err:
+            rsp_dict = {'error': f'{err}'}
         return rsp_dict
 
 
     def receive_until_done(self):
         data_list = []
         while True:
-            msg_json = self.readline()
-            msg_json = msg_json.strip()
-            msg_dict = json.loads(msg_json.decode('utf-8'))
-            if 'data' in msg_dict:
-                data = msg_dict['data']
+            rsp_json = self.readline()
+            rsp_json = rsp_json.strip()
+            rsp_dict = json.loads(rsp_json.decode('utf-8'))
+            if 'data' in rsp_dict:
+                data = rsp_dict['data']
                 data_list.append(data)
                 data_tuple = float(data['t']), float(data['v']), float(data['i'])
-                print('t: {:e}, v: {:e}, i: {:e}'.format(*data_tuple))
-            if 'error' in msg_dict:
-                print(msg_dict['error'])
+                print('t: {:1.2e}, v: {:1.2e}, i: {:1.2e}'.format(*data_tuple))
+            if 'error' in rsp_dict:
+                print(rsp_dict['error'])
                 break
-            if 'done' in msg_dict:
+            if 'done' in rsp_dict:
                 break
         tsec = np.array([item['t'] for item in data_list])
         volt = np.array([item['v'] for item in data_list])
